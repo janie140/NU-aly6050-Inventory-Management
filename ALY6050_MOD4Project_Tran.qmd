@@ -1,0 +1,186 @@
+---
+title: "ALY6050_MOD4Project_Tran"
+format: html
+---
+
+## Project: A Prescriptive Model for Strategic Decision-making, An Inventory Management Decision Model
+
+## Part I:
+
+```{r}
+# Model Parameters
+Unit_cost <- 80
+Holding_rate <- 0.18
+Ordering_cost <- 220 # per order
+
+# Uncontrollable variables
+Annual_demand <-  15000 
+
+# # Decision (controllable) variables
+# quantity_per_order <- q
+# # Mathematical functions
+# unit_holding_cost <- Unit_cost*Holding_rate #per unit per year
+# orders_per_year <- Annual_demand/q
+# Average_inventory <- q/2 #re-order point
+# Annual_ordering_cost <- orders_per_year*Ordering_cost
+# Annual_holding_cost <- Average_inventory*unit_holding_cost
+# Total_cost <- Annual_ordering_cost + Annual_holding_cost
+
+# Model solution
+Total_cost <- function(q) {Annual_demand/q * Ordering_cost +
+    q/2 * Unit_cost*Holding_rate
+}
+
+# Objective: Minimize total cost
+result <- optimize(Total_cost, c(300,1000), maximum=FALSE)
+
+# Plot Total Cost vs Order Quantity
+q <- seq(300, 1000, by = 1)
+c <- Total_cost(q)
+
+plot(q, c, 'l', main="Total Cost vs Order Quantity", xlab = "Order Quantity", ylab = "Total Cost ($)")
+
+# zoom in
+q <- seq(675, 680, by = 1)
+c <- Total_cost(q)
+
+plot(q, c, 'l', main = "Total Cost vs Order Quantity", xlab = "Order Quantity", ylab = "Total Cost ($)")
+
+q[which.min(c)]
+c[which.min(c)]
+```
+
+## Part II:
+
+#### Assume that all problem parameters have the same values as those in part I, but that the annual demand has a triangular probability distribution between 13000 and 17000 units with a mode of 15000 units.
+
+1.  Perform a simulation consisting of 1000 occurrences and calculate the minimum total cost for each occurrence.
+
+```{r}
+library(pacman)
+p_load(tidyverse, triangle, fitdistrplus)
+
+# new model
+Total_cost <- function(q, d) {d/q * Ordering_cost +
+    q/2 * Unit_cost*Holding_rate
+}
+
+# simulation
+set.seed(123)
+random_demand <- rtriangle(1000, a = 13000, b = 17000, c = 15000)
+min_value <- vector(length = 1000)
+objective_value <- vector(length = 1000)
+annual_orders <- vector(length = 1000)
+
+for ( i in 1:1000) {
+  result <- optimize(Total_cost, c(300,1000), d = random_demand[i], maximum = FALSE)
+  min_value[i] <- round(result$minimum, 0)
+  objective_value[i] <- result$objective
+  annual_orders[i] <- round(random_demand[i]/ min_value[i], 0)
+}
+
+df <- tibble(rdemand = random_demand, total_cost = objective_value,
+             order_quantity = min_value, annual_orders = annual_orders)
+```
+
+\(i\)  Estimate the expected minimum total cost by constructing a 95% confidence interval for it and determine the probability distribution that best fits its distribution. Verify the validity of your choice.
+
+```{r}
+# Estimate the expected minimum total cost by constructing a 95% confidence interval
+t.test(df$total_cost, conf.level = 0.95)
+
+# determine the probability distribution that best fits its distribution
+hist(df$total_cost, freq=F, main = "Distribution of expected minimum total cost",
+          xlab = "Expected minimum total cost", ylab = "Probability")
+
+# Create a histogram without plotting
+hist_data <- hist(df$total_cost, breaks = "FD", plot = FALSE)
+
+# Extract the breaks from the histogram object
+breaks <- hist_data$breaks
+
+obs_stats <- descdist(df$total_cost, print = TRUE, graph = TRUE)
+
+######## Normal distribution test
+# Calculate observed frequencies
+observed_freq <- table(cut(df$total_cost, breaks = breaks, include.lowest=TRUE))
+observed_table <- as.data.frame(observed_freq)
+
+# Calculate expected frequencies using the fitted distribution
+expected_freq <- diff(pnorm(breaks, mean = obs_stats$mean, sd = obs_stats$sd))*
+  length(df$total_cost)
+
+# Perform chi-squared test
+test_statistic <- sum((observed_table[,2] - expected_freq)^2 / expected_freq)
+
+d.f <- (length(breaks) - 1) - 1 - 2
+
+p_value <- pchisq(test_statistic, d.f, lower.tail = FALSE)
+
+cat("p-value:", p_value, "\n")
+
+```
+
+\(ii\)  Estimate the expected order quantity by constructing a 95% confidence interval for it and determine the probability distribution that best fits its distribution. Verify the validity of your choice.
+
+```{r}
+# Estimate the expected order quantity by constructing a 95% confidence interval
+t.test(df$order_quantity, conf.level = 0.95)
+
+# determine the probability distribution that best fits its distribution
+hist(df$order_quantity, freq = F, main = "Distribution of expected order quantity", xlab = "Expected order quantity", ylab = "Probability")
+
+######## Poisson distribution test
+# Calculate observed frequencies
+observed_freq <- table(df$order_quantity)
+observed_table <- as.data.frame(observed_freq)
+
+# Fit a Poisson distribution to the data
+fit <- fitdist(df$order_quantity, "pois")
+lambda <- fit$estimate
+
+# Calculate expected frequencies using the fitted distribution
+values <- sort(unique(df$order_quantity), decreasing = FALSE)
+expected_freq <- dpois(values, lambda) * length(df$order_quantity)
+
+# Perform chi-squared test
+test_statistic <- sum((observed_table[,2] - expected_freq)^2 / expected_freq)
+
+d.f <- length(values) - 1 - 1
+
+p_value <- pchisq(test_statistic, d.f, lower.tail = FALSE)
+
+cat("p-value:", p_value, "\n")
+```
+
+\(iii\) Estimate the expected annual number of orders by constructing a 95% confidence interval for it and determine the probability distribution that best fits its distribution. Verify the validity of your choice.
+
+```{r}
+# Estimate the expected annual number of orders by constructing a 95% confidence interval
+t.test(df$annual_orders, conf.level = 0.95)
+
+# determine the probability distribution that best fits its distribution
+hist(df$annual_orders, freq = F, main = "Distribution of expected annual number of orders", xlab = "Expected annual number of orders", ylab = "Probability")
+
+######## Poisson distribution test
+# Calculate observed frequencies
+observed_freq <- table(df$annual_orders)
+observed_table <- as.data.frame(observed_freq)
+
+# Fit a Poisson distribution to the data
+fit <- fitdist(df$annual_orders, "pois")
+lambda <- fit$estimate
+
+# Calculate expected frequencies using the fitted distribution
+values <- sort(unique(df$annual_orders, decreasing = FALSE))
+expected_freq <- dpois(values, lambda) * length(df$annual_orders)
+
+# Perform chi-squared test
+test_statistic <- sum((observed_table[,2] - expected_freq)^2 / expected_freq)
+
+d.f <- length(values) - 1 - 1
+
+p_value <- pchisq(test_statistic, d.f, lower.tail = FALSE)
+
+cat("p-value:", p_value, "\n")
+```
