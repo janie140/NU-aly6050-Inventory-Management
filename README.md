@@ -1,5 +1,5 @@
 # NU-aly6050-Inventory-Management
-A Prescriptive Model for Strategic Decision-making, An Inventory Management Decision Model
+A Prescriptive Model for Strategic Decision-making, An Inventory Management Decision Model using Excel and R
 
 Introduction
 
